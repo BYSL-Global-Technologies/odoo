@@ -63,7 +63,7 @@ class KeyboardUSBDriver(Driver):
                 self.input_device = device
 
         device_name = self._device_name.lower()
-        if 'barcode' in device_name or 'scanner' in device_name or 'reader' in device_name or self.dev.interface_protocol == '0':
+        if 'honeywell' in device_name or '7190g' in device_name or 'barcode' in device_name or 'scanner' in device_name or 'reader' in device_name or self.dev.interface_protocol == '0':
             self._device_type = 'scanner'
             self._barcodes = Queue()
             self._current_barcode = ''
