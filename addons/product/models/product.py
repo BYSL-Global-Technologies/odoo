@@ -365,6 +365,9 @@ class ProductProduct(models.Model):
         self.clear_caches()
         return res
 
+    def _filter_to_unlink(self, check_access=True):
+        return self
+
     def _unlink_or_archive(self, check_access=True):
         """Unlink or archive products.
         Try in batch as much as possible because it is much faster.
@@ -382,6 +385,10 @@ class ProductProduct(models.Model):
             self.check_access_rights('write')
             self.check_access_rule('write')
             self = self.sudo()
+            to_unlink = self._filter_to_unlink()
+            to_archive = self - to_unlink
+            to_archive.write({'active': False})
+            self = to_unlink
 
         try:
             with self.env.cr.savepoint(), tools.mute_logger('odoo.sql_db'):
@@ -416,6 +423,12 @@ class ProductProduct(models.Model):
             args.append((('categ_id', 'child_of', self._context['search_default_categ_id'])))
         return super(ProductProduct, self)._search(args, offset=offset, limit=limit, order=order, count=count, access_rights_uid=access_rights_uid)
 
+    @api.depends_context('display_default_code')
+    def _compute_display_name(self):
+        # `display_name` is calling `name_get()`` which is overidden on product
+        # to depend on `display_default_code`
+        return super()._compute_display_name()
+
     def name_get(self):
         # TDE: this could be cleaned a bit I think
 
@@ -447,10 +460,14 @@ class ProductProduct(models.Model):
         product_template_ids = self.sudo().mapped('product_tmpl_id').ids
 
         if partner_ids:
-            supplier_info = self.env['product.supplierinfo'].sudo().search([
-                ('product_tmpl_id', 'in', product_template_ids),
-                ('name', 'in', partner_ids),
-            ])
+            # name_get() of product with different quantities of the same supplier will be ambiguous, so
+            # we can pass a supplier_info in the context if we already know which one we want
+            supplier_info = self.env.context.get('supplier_info', False)
+            if not supplier_info:
+                supplier_info = self.env['product.supplierinfo'].sudo().search([
+                    ('product_tmpl_id', 'in', product_template_ids),
+                    ('name', 'in', partner_ids),
+                ])
             # Prefetch the fields used by the `name_get`, so `browse` doesn't fetch other fields
             # Use `load=False` to not call `name_get` for the `product_tmpl_id` and `product_id`
             supplier_info.sudo().read(['product_tmpl_id', 'product_id', 'product_name', 'product_code'], load=False)
