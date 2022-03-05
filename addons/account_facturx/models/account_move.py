@@ -156,10 +156,6 @@ class AccountMove(models.Model):
             partner_type = invoice_form.journal_id.type == 'purchase' and 'SellerTradeParty' or 'BuyerTradeParty'
             invoice_form.partner_id = find_partner(partner_type)
 
-            # Delivery Partner
-            if 'partner_shipping_id' in self._fields:
-                invoice_form.partner_shipping_id = find_partner('ShipToTradeParty')
-
             # Reference.
             elements = tree.xpath('//rsm:ExchangedDocument/ram:ID', namespaces=tree.nsmap)
             if elements:
@@ -183,6 +179,11 @@ class AccountMove(models.Model):
                 if elements[0].attrib.get('currencyID'):
                     currency_str = elements[0].attrib['currencyID']
                     currency = self.env.ref('base.%s' % currency_str.upper(), raise_if_not_found=False)
+                    if currency and not currency.active:
+                        raise UserError(
+                            _('The currency (%s) of the document you are uploading is not active in this database.\n'
+                              'Please activate it before trying again to import.') % currency.name
+                        )
                     if currency != self.env.company.currency_id and currency.active:
                         invoice_form.currency_id = currency
 
